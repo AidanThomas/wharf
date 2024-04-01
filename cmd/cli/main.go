@@ -24,10 +24,17 @@ func main() {
 
 	app := tview.NewApplication()
 
+	ptrFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	ctrFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	ctrFlex.SetBackgroundColor(defaultTheme.bg)
-	ctrFlex.SetBorder(true)
 	ctrFlex.SetTitle("Containers").SetTitleAlign(tview.AlignLeft)
+
+	mainFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	mainFlex.SetBorder(true)
+	mainFlex.SetBackgroundColor(defaultTheme.bg)
+	mainFlex.
+		AddItem(ptrFlex, 3, 0, true).
+		AddItem(ctrFlex, 0, 1, false)
 
 	apiClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -41,10 +48,11 @@ func main() {
 	}
 
 	for _, ctr := range containers {
+		ptrFlex.AddItem(createPointerEntry(defaultTheme), 1, 0, false)
 		ctrFlex.AddItem(createContainerEntry(ctr, defaultTheme), 1, 0, false)
 	}
 
-	app.SetRoot(ctrFlex, true)
+	app.SetRoot(mainFlex, true)
 	if err := app.Run(); err != nil {
 		panic(err)
 	}
@@ -67,5 +75,15 @@ func createContainerEntry(ctr types.Container, theme colours) *tview.TextView {
 	view.SetDynamicColors(true)
 	view.SetBorder(false)
 	view.SetText(ctrString)
+	return view
+}
+
+func createPointerEntry(theme colours) *tview.TextView {
+	view := tview.NewTextView()
+	view.SetTextAlign(tview.AlignLeft)
+	view.SetBackgroundColor(theme.bg)
+	view.SetDynamicColors(true)
+	view.SetBorder(false)
+	view.SetText(" > ")
 	return view
 }
