@@ -16,6 +16,10 @@ type colours struct {
 	fg tcell.Color
 }
 
+var (
+	index = -1
+)
+
 func main() {
 	defaultTheme := colours{
 		bg: tcell.ColorNone,
@@ -24,17 +28,9 @@ func main() {
 
 	app := tview.NewApplication()
 
-	ptrFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	ctrFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	ctrFlex.SetBackgroundColor(defaultTheme.bg)
-	ctrFlex.SetTitle("Containers").SetTitleAlign(tview.AlignLeft)
-
-	mainFlex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	mainFlex.SetBorder(true)
-	mainFlex.SetBackgroundColor(defaultTheme.bg)
-	mainFlex.
-		AddItem(ptrFlex, 3, 0, true).
-		AddItem(ctrFlex, 0, 1, false)
+	flex := tview.NewFlex().SetDirection(tview.FlexRow)
+	flex.SetBorder(true)
+	flex.SetBackgroundColor(defaultTheme.bg)
 
 	apiClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -48,42 +44,61 @@ func main() {
 	}
 
 	for _, ctr := range containers {
-		ptrFlex.AddItem(createPointerEntry(defaultTheme), 1, 0, false)
-		ctrFlex.AddItem(createContainerEntry(ctr, defaultTheme), 1, 0, false)
+		ctrFlex := tview.NewFlex()
+		ctrFlex.SetBackgroundColor(defaultTheme.bg)
+		caret := tview.NewTextView().SetText("   ")
+		caret.SetBackgroundColor(defaultTheme.bg)
+		text := tview.NewTextView().SetText(getContainerText(ctr))
+		text.SetBackgroundColor(defaultTheme.bg)
+		text.SetDynamicColors(true)
+		ctrFlex.
+			AddItem(caret, 3, 0, false).
+			AddItem(text, 0, 1, false)
+		ctrFlex.SetFocusFunc(func() {
+			caret.SetText(" > ")
+		})
+		ctrFlex.SetBlurFunc(func() {
+			caret.SetText("   ")
+		})
+		flex.AddItem(ctrFlex, 1, 1, false)
 	}
 
-	app.SetRoot(mainFlex, true)
-	if err := app.Run(); err != nil {
+	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'j' {
+			if index < flex.GetItemCount()-1 {
+				index++
+			} else {
+				index = 0
+			}
+			app.SetFocus(flex.GetItem(index))
+		}
+
+		if event.Rune() == 'k' {
+			if index > 0 {
+				index--
+			} else {
+				index = flex.GetItemCount() - 1
+			}
+			app.SetFocus(flex.GetItem(index))
+		}
+		return event
+	})
+
+	if err := app.SetRoot(flex, true).SetFocus(flex).Run(); err != nil {
 		panic(err)
 	}
 }
 
-func createContainerEntry(ctr types.Container, theme colours) *tview.TextView {
-	var ctrString string
+func getContainerText(ctr types.Container) string {
+	out := fmt.Sprintf("%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.State)
 	switch ctr.State {
 	case "running":
-		ctrString = fmt.Sprintf("[green]%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.State)
+		out = fmt.Sprintf("[green]%s", out)
 	case "exited":
-		ctrString = fmt.Sprintf("[red]%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.State)
+		out = fmt.Sprintf("[red]%s", out)
 	default:
-		ctrString = fmt.Sprintf("[yellow]%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.State)
+		out = fmt.Sprintf("[yellow]%s", out)
 	}
 
-	view := tview.NewTextView()
-	view.SetTextAlign(tview.AlignLeft)
-	view.SetBackgroundColor(theme.bg)
-	view.SetDynamicColors(true)
-	view.SetBorder(false)
-	view.SetText(ctrString)
-	return view
-}
-
-func createPointerEntry(theme colours) *tview.TextView {
-	view := tview.NewTextView()
-	view.SetTextAlign(tview.AlignLeft)
-	view.SetBackgroundColor(theme.bg)
-	view.SetDynamicColors(true)
-	view.SetBorder(false)
-	view.SetText(" > ")
-	return view
+	return out
 }
