@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -48,9 +49,7 @@ func main() {
 		ctrFlex.SetBackgroundColor(defaultTheme.bg)
 		caret := tview.NewTextView().SetText("   ")
 		caret.SetBackgroundColor(defaultTheme.bg)
-		text := tview.NewTextView().SetText(getContainerText(ctr))
-		text.SetBackgroundColor(defaultTheme.bg)
-		text.SetDynamicColors(true)
+		text := createContainerFlex(ctr, defaultTheme)
 		ctrFlex.
 			AddItem(caret, 3, 0, false).
 			AddItem(text, 0, 1, false)
@@ -60,7 +59,7 @@ func main() {
 		ctrFlex.SetBlurFunc(func() {
 			caret.SetText("   ")
 		})
-		flex.AddItem(ctrFlex, 1, 1, false)
+		flex.AddItem(ctrFlex, 3, 1, false)
 	}
 
 	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -89,16 +88,44 @@ func main() {
 	}
 }
 
-func getContainerText(ctr types.Container) string {
-	out := fmt.Sprintf("%s %s (status: %s)\n", ctr.ID, ctr.Image, ctr.State)
+// Image, Names, Status, Ports, ID
+
+func createContainerFlex(ctr types.Container, theme colours) *tview.Flex {
+	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	flex.SetBackgroundColor(theme.bg)
+
+	var colour string
 	switch ctr.State {
 	case "running":
-		out = fmt.Sprintf("[green]%s", out)
+		colour = "green"
 	case "exited":
-		out = fmt.Sprintf("[red]%s", out)
+		colour = "red"
 	default:
-		out = fmt.Sprintf("[yellow]%s", out)
+		colour = "yellow"
 	}
 
-	return out
+	names := tview.NewTextView().SetDynamicColors(true)
+	names.SetBackgroundColor(theme.bg)
+	names.SetText(fmt.Sprintf("[%s]%s", colour, strings.Join(ctr.Names, ", ")))
+	image := tview.NewTextView().SetDynamicColors(true)
+	image.SetBackgroundColor(theme.bg)
+	image.SetText(fmt.Sprintf("[%s]%s", colour, ctr.Image))
+	status := tview.NewTextView().SetDynamicColors(true)
+	status.SetBackgroundColor(theme.bg)
+	status.SetText(fmt.Sprintf("[%s]%s", colour, ctr.Status))
+	ports := tview.NewTextView().SetDynamicColors(true)
+	ports.SetBackgroundColor(theme.bg)
+	ports.SetText(fmt.Sprintf("[%s]%s", colour, "ports"))
+	id := tview.NewTextView().SetDynamicColors(true)
+	id.SetBackgroundColor(theme.bg)
+	id.SetText(fmt.Sprintf("[%s]%s", colour, ctr.ID))
+
+	flex.
+		AddItem(names, 0, 1, false).
+		AddItem(image, 0, 1, false).
+		AddItem(status, 0, 1, false).
+		AddItem(ports, 0, 1, false).
+		AddItem(id, 0, 1, false)
+
+	return flex
 }
