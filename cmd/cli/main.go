@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -17,10 +18,6 @@ type colours struct {
 	fg tcell.Color
 }
 
-var (
-	index = -1
-)
-
 func main() {
 	defaultTheme := colours{
 		bg: tcell.ColorNone,
@@ -28,8 +25,6 @@ func main() {
 	}
 
 	app := tview.NewApplication()
-	table := tview.NewTable()
-	table.SetBackgroundColor(defaultTheme.bg)
 
 	apiClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -42,27 +37,39 @@ func main() {
 		panic(err)
 	}
 
-	headings := []string{"Image", "Names", "Status", "Ports", "ID"}
-	for i, h := range headings {
-		table.SetCell(0, i+1, tview.NewTableCell(h))
-	}
-
-	for i, ctr := range containers {
-		color, data := parseContainer(ctr)
-		for j, d := range data {
-			table.SetCell(i+1, j+1, tview.NewTableCell(d).SetTextColor(color))
-		}
-	}
-
+	table := tview.NewTable()
+	table.SetBackgroundColor(defaultTheme.bg)
 	table.SetFixed(1, 0)
 	table.SetBorder(true)
+	table.SetSelectable(true, false)
+	table.Select(1, 0)
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
-			table.SetSelectable(true, false)
-			table.Select(1, 0)
+			row, _ := table.GetSelection()
+			id := table.GetCell(row, 4).Text
+			filters := filters.NewArgs()
+			filters.Add("id", id)
+			filtered, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true, Filters: filters})
+			if err != nil {
+				panic(err)
+			}
+			switch filtered[0].State {
+			case "running":
+				apiClient.ContainerStop(context.Background(), id, container.StopOptions{})
+			case "exited":
+				apiClient.ContainerStart(context.Background(), id, container.StartOptions{})
+			}
+			containers, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true})
+			if err != nil {
+				panic(err)
+			}
+			table.Clear()
+			drawTable(table, containers)
 		}
 		return event
 	})
+
+	drawTable(table, containers)
 
 	flex := tview.NewFlex()
 	flex.AddItem(table, 0, 1, true)
@@ -93,6 +100,11 @@ func parseContainer(ctr types.Container) (tcell.Color, []string) {
 			port = fmt.Sprintf("%d/%s", p.PrivatePort, p.Type)
 		}
 		ports = append(ports, port)
+
+		if len(ports) > 3 {
+			ports = ports[:3]
+			ports = append(ports, "...")
+		}
 	}
 
 	image := ctr.Image
@@ -101,4 +113,19 @@ func parseContainer(ctr types.Container) (tcell.Color, []string) {
 	id := ctr.ID
 
 	return color, []string{image, names, status, strings.Join(ports, ", "), id}
+}
+
+func drawTable(tbl *tview.Table, containers []types.Container) {
+
+	headings := []string{"Image", "Names", "Status", "Ports", "ID"}
+	for i, h := range headings {
+		tbl.SetCell(0, i, tview.NewTableCell(h).SetExpansion(1).SetSelectable(false))
+	}
+
+	for i, ctr := range containers {
+		color, data := parseContainer(ctr)
+		for j, d := range data {
+			tbl.SetCell(i+1, j, tview.NewTableCell(d).SetTextColor(color).SetExpansion(1))
+		}
+	}
 }
