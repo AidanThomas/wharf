@@ -28,10 +28,8 @@ func main() {
 	}
 
 	app := tview.NewApplication()
-
-	flex := tview.NewFlex().SetDirection(tview.FlexRow)
-	flex.SetBorder(true)
-	flex.SetBackgroundColor(defaultTheme.bg)
+	table := tview.NewTable()
+	table.SetBackgroundColor(defaultTheme.bg)
 
 	apiClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -44,88 +42,63 @@ func main() {
 		panic(err)
 	}
 
-	for _, ctr := range containers {
-		ctrFlex := tview.NewFlex()
-		ctrFlex.SetBackgroundColor(defaultTheme.bg)
-		caret := tview.NewTextView().SetText("   ")
-		caret.SetBackgroundColor(defaultTheme.bg)
-		text := createContainerFlex(ctr, defaultTheme)
-		ctrFlex.
-			AddItem(caret, 3, 0, false).
-			AddItem(text, 0, 1, false)
-		ctrFlex.SetFocusFunc(func() {
-			caret.SetText(" > ")
-		})
-		ctrFlex.SetBlurFunc(func() {
-			caret.SetText("   ")
-		})
-		flex.AddItem(ctrFlex, 3, 1, false)
+	headings := []string{"Image", "Names", "Status", "Ports", "ID"}
+	for i, h := range headings {
+		table.SetCell(0, i+1, tview.NewTableCell(h))
 	}
 
-	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Rune() == 'j' {
-			if index < flex.GetItemCount()-1 {
-				index++
-			} else {
-				index = 0
-			}
-			app.SetFocus(flex.GetItem(index))
+	for i, ctr := range containers {
+		color, data := parseContainer(ctr)
+		for j, d := range data {
+			table.SetCell(i+1, j+1, tview.NewTableCell(d).SetTextColor(color))
 		}
+	}
 
-		if event.Rune() == 'k' {
-			if index > 0 {
-				index--
-			} else {
-				index = flex.GetItemCount() - 1
-			}
-			app.SetFocus(flex.GetItem(index))
+	table.SetFixed(1, 0)
+	table.SetBorder(true)
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			table.SetSelectable(true, false)
+			table.Select(1, 0)
 		}
 		return event
 	})
 
-	if err := app.SetRoot(flex, true).SetFocus(flex).Run(); err != nil {
+	flex := tview.NewFlex()
+	flex.AddItem(table, 0, 1, true)
+
+	if err := app.SetRoot(flex, true).EnableMouse(true).SetFocus(flex).Run(); err != nil {
 		panic(err)
 	}
 }
 
 // Image, Names, Status, Ports, ID
-
-func createContainerFlex(ctr types.Container, theme colours) *tview.Flex {
-	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	flex.SetBackgroundColor(theme.bg)
-
-	var colour string
+func parseContainer(ctr types.Container) (tcell.Color, []string) {
+	var color tcell.Color
 	switch ctr.State {
 	case "running":
-		colour = "green"
+		color = tcell.ColorGreen
 	case "exited":
-		colour = "red"
+		color = tcell.ColorRed
 	default:
-		colour = "yellow"
+		color = tcell.ColorYellow
 	}
 
-	names := tview.NewTextView().SetDynamicColors(true)
-	names.SetBackgroundColor(theme.bg)
-	names.SetText(fmt.Sprintf("[%s]%s", colour, strings.Join(ctr.Names, ", ")))
-	image := tview.NewTextView().SetDynamicColors(true)
-	image.SetBackgroundColor(theme.bg)
-	image.SetText(fmt.Sprintf("[%s]%s", colour, ctr.Image))
-	status := tview.NewTextView().SetDynamicColors(true)
-	status.SetBackgroundColor(theme.bg)
-	status.SetText(fmt.Sprintf("[%s]%s", colour, ctr.Status))
-	ports := tview.NewTextView().SetDynamicColors(true)
-	ports.SetBackgroundColor(theme.bg)
-	ports.SetText(fmt.Sprintf("[%s]%s", colour, "ports"))
-	id := tview.NewTextView().SetDynamicColors(true)
-	id.SetBackgroundColor(theme.bg)
-	id.SetText(fmt.Sprintf("[%s]%s", colour, ctr.ID))
+	var ports []string
+	for _, p := range ctr.Ports {
+		var port string
+		if p.IP != "" {
+			port = fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type)
+		} else {
+			port = fmt.Sprintf("%d/%s", p.PrivatePort, p.Type)
+		}
+		ports = append(ports, port)
+	}
 
-	flex.
-		AddItem(names, 0, 1, false).
-		AddItem(image, 0, 1, false).
-		AddItem(status, 0, 1, false).
-		AddItem(ports, 0, 1, false).
-		AddItem(id, 0, 1, false)
+	image := ctr.Image
+	names := strings.Join(ctr.Names, ", ")
+	status := ctr.Status
+	id := ctr.ID
 
-	return flex
+	return color, []string{image, names, status, strings.Join(ports, ", "), id}
 }
