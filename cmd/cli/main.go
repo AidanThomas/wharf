@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
+	"github.com/AidanThomas/wharf/internal/providers/docker"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -26,13 +23,13 @@ func main() {
 
 	app := tview.NewApplication()
 
-	apiClient, err := client.NewClientWithOpts(client.FromEnv)
+	dClient, err := docker.NewClient()
 	if err != nil {
 		panic(err)
 	}
-	defer apiClient.Close()
+	defer dClient.Close()
 
-	containers, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true})
+	containers, err := dClient.GetAll()
 	if err != nil {
 		panic(err)
 	}
@@ -47,19 +44,17 @@ func main() {
 		if event.Key() == tcell.KeyEnter {
 			row, _ := table.GetSelection()
 			id := table.GetCell(row, 4).Text
-			filters := filters.NewArgs()
-			filters.Add("id", id)
-			filtered, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true, Filters: filters})
+			ctr, err := dClient.GetById(id)
 			if err != nil {
 				panic(err)
 			}
-			switch filtered[0].State {
+			switch ctr.State {
 			case "running":
-				apiClient.ContainerStop(context.Background(), id, container.StopOptions{})
+				dClient.StopContainer(id)
 			case "exited":
-				apiClient.ContainerStart(context.Background(), id, container.StartOptions{})
+				dClient.StartContainer(id)
 			}
-			containers, err := apiClient.ContainerList(context.Background(), container.ListOptions{All: true})
+			containers, err := dClient.GetAll()
 			if err != nil {
 				panic(err)
 			}
