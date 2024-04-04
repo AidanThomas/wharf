@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"strings"
+	"time"
 
 	"github.com/AidanThomas/wharf/internal/providers/docker"
-	"github.com/docker/docker/api/types"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -49,17 +47,20 @@ func main() {
 				panic(err)
 			}
 			switch ctr.State {
-			case "running":
+			case docker.Running:
 				dClient.StopContainer(id)
-			case "exited":
+			case docker.Exited:
 				dClient.StartContainer(id)
 			}
-			containers, err := dClient.GetAll()
-			if err != nil {
-				panic(err)
-			}
-			table.Clear()
-			drawTable(table, containers)
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+				containers, err := dClient.GetAll()
+				if err != nil {
+					panic(err)
+				}
+				drawTable(table, containers)
+				app.Draw()
+			}()
 		}
 		return event
 	})
@@ -75,50 +76,27 @@ func main() {
 }
 
 // Image, Names, Status, Ports, ID
-func parseContainer(ctr types.Container) (tcell.Color, []string) {
-	var color tcell.Color
+func getColour(ctr docker.Container) tcell.Color {
 	switch ctr.State {
-	case "running":
-		color = tcell.ColorGreen
-	case "exited":
-		color = tcell.ColorRed
+	case docker.Running:
+		return tcell.ColorGreen
+	case docker.Exited:
+		return tcell.ColorRed
 	default:
-		color = tcell.ColorYellow
+		return tcell.ColorYellow
 	}
-
-	var ports []string
-	for _, p := range ctr.Ports {
-		var port string
-		if p.IP != "" {
-			port = fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type)
-		} else {
-			port = fmt.Sprintf("%d/%s", p.PrivatePort, p.Type)
-		}
-		ports = append(ports, port)
-
-		if len(ports) > 3 {
-			ports = ports[:3]
-			ports = append(ports, "...")
-		}
-	}
-
-	image := ctr.Image
-	names := strings.Join(ctr.Names, ", ")
-	status := ctr.Status
-	id := ctr.ID
-
-	return color, []string{image, names, status, strings.Join(ports, ", "), id}
 }
 
-func drawTable(tbl *tview.Table, containers []types.Container) {
-
+func drawTable(tbl *tview.Table, containers []docker.Container) {
 	headings := []string{"Image", "Names", "Status", "Ports", "ID"}
 	for i, h := range headings {
 		tbl.SetCell(0, i, tview.NewTableCell(h).SetExpansion(1).SetSelectable(false))
 	}
+	tbl.Clear()
 
 	for i, ctr := range containers {
-		color, data := parseContainer(ctr)
+		color := getColour(ctr)
+		data := []string{ctr.Image, ctr.Names, ctr.Status, ctr.Ports, ctr.ID}
 		for j, d := range data {
 			tbl.SetCell(i+1, j, tview.NewTableCell(d).SetTextColor(color).SetExpansion(1))
 		}
