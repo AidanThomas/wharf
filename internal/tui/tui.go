@@ -14,16 +14,21 @@ type Application struct {
 	cli   *docker.Client
 }
 
-func NewTui(cli *docker.Client) (*Application, error) {
+func NewTui() (*Application, error) {
 	defaultTheme := Theme{
 		Bg: tcell.ColorNone,
 		Fg: tcell.ColorNone,
 	}
 
+	dCli, err := docker.NewClient()
+	if err != nil {
+		return &Application{}, err
+	}
+
 	app := &Application{
 		Application: tview.NewApplication(),
 		theme:       defaultTheme,
-		cli:         cli,
+		cli:         dCli,
 	}
 
 	if err := app.createUI(); err != nil {
@@ -31,6 +36,10 @@ func NewTui(cli *docker.Client) (*Application, error) {
 	}
 
 	return app, nil
+}
+
+func (a *Application) Close() {
+	a.cli.Close()
 }
 
 func (a *Application) createUI() error {

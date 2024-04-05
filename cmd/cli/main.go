@@ -1,20 +1,13 @@
 package main
 
-import (
-	"github.com/AidanThomas/wharf/internal/providers/docker"
-	"github.com/AidanThomas/wharf/internal/tui"
-)
+import "github.com/AidanThomas/wharf/internal/tui"
 
 func main() {
-	dClient, err := docker.NewClient()
+	app, err := tui.NewTui()
 	if err != nil {
 		panic(err)
 	}
-	defer dClient.Close()
-	app, err := tui.NewTui(dClient)
-	if err != nil {
-		panic(err)
-	}
+	defer app.Close()
 	if err := app.Run(); err != nil {
 		panic(err)
 	}
