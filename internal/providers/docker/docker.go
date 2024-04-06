@@ -71,6 +71,25 @@ func (c *Client) GetById(id string) (Container, error) {
 	return Container{}, errors.New("no container found by that id")
 }
 
+func (c *Client) SearchByName(term string) ([]Container, error) {
+	filters := filters.NewArgs()
+	filters.Add("name", term)
+	containers, err := c.client.ContainerList(context.Background(), container.ListOptions{
+		All:     true,
+		Filters: filters,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var out []Container
+	for _, ctr := range containers {
+		out = append(out, parseContainer(ctr))
+	}
+
+	return out, nil
+}
+
 func (c *Client) StartContainer(id string) {
 	c.client.ContainerStart(context.Background(), id, container.StartOptions{})
 }

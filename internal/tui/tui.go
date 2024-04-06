@@ -14,6 +14,11 @@ type Application struct {
 	cli   *docker.Client
 }
 
+var (
+	mainFlex     *tview.Flex
+	resultsTable *tview.Table
+)
+
 func NewTui() (*Application, error) {
 	defaultTheme := Theme{
 		Bg: tcell.ColorNone,
@@ -43,17 +48,20 @@ func (a *Application) Close() {
 }
 
 func (a *Application) createUI() error {
-	flx := tview.NewFlex()
-	tbl := tview.NewTable()
-	tbl.SetBackgroundColor(a.theme.Bg)
-	tbl.SetFixed(1, 0)
-	tbl.SetBorder(true)
-	tbl.SetSelectable(true, false)
-	tbl.Select(1, 0)
-	tbl.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			row, _ := tbl.GetSelection()
-			id := tbl.GetCell(row, 4).Text
+	mainFlex = tview.NewFlex()
+	resultsTable = tview.NewTable()
+	resultsTable.SetBackgroundColor(a.theme.Bg)
+	resultsTable.SetFixed(1, 0)
+	resultsTable.SetBorder(true)
+	resultsTable.SetSelectable(true, false)
+	resultsTable.Select(1, 0)
+	resultsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		key := event.Key()
+		rune := event.Rune()
+		switch key {
+		case tcell.KeyEnter:
+			row, _ := resultsTable.GetSelection()
+			id := resultsTable.GetCell(row, 4).Text
 			ctr, err := a.cli.GetById(id)
 			if err != nil {
 				panic(err)
@@ -70,9 +78,13 @@ func (a *Application) createUI() error {
 				if err != nil {
 					panic(err)
 				}
-				drawTable(tbl, containers)
+				drawTable(resultsTable, containers)
 				a.Draw()
 			}()
+		}
+		switch rune {
+		case '/':
+			a.createSearchUI()
 		}
 		return event
 	})
@@ -81,12 +93,44 @@ func (a *Application) createUI() error {
 		return err
 	}
 
-	drawTable(tbl, containers)
+	drawTable(resultsTable, containers)
 
-	flx.AddItem(tbl, 0, 1, true)
-	a.SetRoot(flx, true).EnableMouse(true).SetFocus(flx)
+	mainFlex.AddItem(resultsTable, 0, 1, true)
+	a.SetRoot(mainFlex, true).EnableMouse(true).SetFocus(mainFlex)
 
 	return nil
+}
+
+func (a *Application) createSearchUI() {
+	mainFlex.Clear()
+
+	searchBox := tview.NewTextArea()
+	searchBox.SetBorder(true)
+	searchBox.SetBackgroundColor(a.theme.Bg)
+	searchBox.SetPlaceholder("Search by name")
+	searchBox.SetPlaceholderStyle(tcell.StyleDefault)
+	searchBox.SetTextStyle(tcell.StyleDefault)
+
+	searchBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			searchTerm := searchBox.GetText()
+			containers, err := a.cli.SearchByName(searchTerm)
+			if err != nil {
+				panic(err)
+			}
+			drawTable(resultsTable, containers)
+			return nil
+		}
+		return event
+	})
+
+	mainFlex.SetDirection(tview.FlexRow)
+
+	mainFlex.
+		AddItem(searchBox, 3, 1, true).
+		AddItem(resultsTable, 0, 1, false)
+
+	a.SetFocus(searchBox)
 }
 
 func getColour(ctr docker.Container) tcell.Color {
