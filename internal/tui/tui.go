@@ -16,7 +16,7 @@ type Application struct {
 
 var (
 	mainFlex     *tview.Flex
-	resultsTable *tview.Table
+	resultsTable *Table
 )
 
 func NewTui() (*Application, error) {
@@ -49,15 +49,27 @@ func (a *Application) Close() {
 
 func (a *Application) createUI() error {
 	mainFlex = tview.NewFlex()
-	resultsTable = tview.NewTable()
-	resultsTable.SetBackgroundColor(a.theme.Bg)
-	resultsTable.SetFixed(1, 0)
-	resultsTable.SetBorder(true)
-	resultsTable.SetSelectable(true, false)
-	resultsTable.Select(1, 0)
-	resultsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+
+	mainFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		key := event.Key()
 		rune := event.Rune()
+		switch rune {
+		case '/':
+			a.drawSearch()
+			return nil
+		}
+		switch key {
+		case tcell.KeyEsc:
+			if err := a.drawDefault(); err != nil {
+				panic(err)
+			}
+		}
+		return event
+	})
+
+	resultsTable = NewContainersTable(a.theme)
+	resultsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		key := event.Key()
 		switch key {
 		case tcell.KeyEnter:
 			row, _ := resultsTable.GetSelection()
@@ -78,13 +90,9 @@ func (a *Application) createUI() error {
 				if err != nil {
 					panic(err)
 				}
-				drawTable(resultsTable, containers)
+				resultsTable.DrawTable(containers)
 				a.Draw()
 			}()
-		}
-		switch rune {
-		case '/':
-			a.createSearchUI()
 		}
 		return event
 	})
@@ -93,7 +101,7 @@ func (a *Application) createUI() error {
 		return err
 	}
 
-	drawTable(resultsTable, containers)
+	resultsTable.DrawTable(containers)
 
 	mainFlex.AddItem(resultsTable, 0, 1, true)
 	a.SetRoot(mainFlex, true).EnableMouse(true).SetFocus(mainFlex)
@@ -101,7 +109,23 @@ func (a *Application) createUI() error {
 	return nil
 }
 
-func (a *Application) createSearchUI() {
+func (a *Application) drawDefault() error {
+	mainFlex.Clear()
+
+	resultsTable.Clear()
+	containers, err := a.cli.GetAll()
+	if err != nil {
+		return err
+	}
+
+	mainFlex.AddItem(resultsTable, 0, 1, true)
+	resultsTable.DrawTable(containers)
+	a.SetFocus(resultsTable)
+
+	return nil
+}
+
+func (a *Application) drawSearch() {
 	mainFlex.Clear()
 
 	searchBox := tview.NewTextArea()
@@ -112,13 +136,14 @@ func (a *Application) createSearchUI() {
 	searchBox.SetTextStyle(tcell.StyleDefault)
 
 	searchBox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
+		switch event.Key() {
+		case tcell.KeyEnter:
 			searchTerm := searchBox.GetText()
 			containers, err := a.cli.SearchByName(searchTerm)
 			if err != nil {
 				panic(err)
 			}
-			drawTable(resultsTable, containers)
+			resultsTable.DrawTable(containers)
 			return nil
 		}
 		return event
@@ -141,22 +166,5 @@ func getColour(ctr docker.Container) tcell.Color {
 		return tcell.ColorRed
 	default:
 		return tcell.ColorYellow
-	}
-}
-
-func drawTable(tbl *tview.Table, containers []docker.Container) {
-	tbl.Clear()
-
-	headings := []string{"Image", "Names", "Status", "Ports", "ID"}
-	for i, h := range headings {
-		tbl.SetCell(0, i, tview.NewTableCell(h).SetExpansion(1).SetSelectable(false))
-	}
-
-	for i, ctr := range containers {
-		color := getColour(ctr)
-		data := []string{ctr.Image, ctr.Names, ctr.Status, ctr.Ports, ctr.ID}
-		for j, d := range data {
-			tbl.SetCell(i+1, j, tview.NewTableCell(d).SetTextColor(color).SetExpansion(1))
-		}
 	}
 }
