@@ -8,7 +8,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
 
@@ -41,8 +40,8 @@ func NewClient() (*Client, error) {
 	return &Client{client: c}, nil
 }
 
-func (c *Client) GetAll() ([]Container, error) {
-	containers, err := c.client.ContainerList(context.Background(), container.ListOptions{All: true})
+func (c *Client) GetAll(q Query) ([]Container, error) {
+	containers, err := c.client.ContainerList(context.Background(), q.ParseQuery())
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +54,9 @@ func (c *Client) GetAll() ([]Container, error) {
 	return out, nil
 }
 
-func (c *Client) GetById(id string) (Container, error) {
-	filters := filters.NewArgs(filters.KeyValuePair{Key: "id", Value: id})
-	containers, err := c.client.ContainerList(context.Background(), container.ListOptions{
-		All:     true,
-		Filters: filters,
-	})
+// GetSingle will return the first resulting container, if there is one
+func (c *Client) GetSingle(q Query) (Container, error) {
+	containers, err := c.client.ContainerList(context.Background(), q.ParseQuery())
 	if err != nil {
 		return Container{}, err
 	}
@@ -68,26 +64,7 @@ func (c *Client) GetById(id string) (Container, error) {
 		return parseContainer(containers[0]), nil
 	}
 
-	return Container{}, errors.New("no container found by that id")
-}
-
-func (c *Client) SearchByName(term string) ([]Container, error) {
-	filters := filters.NewArgs()
-	filters.Add("name", term)
-	containers, err := c.client.ContainerList(context.Background(), container.ListOptions{
-		All:     true,
-		Filters: filters,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var out []Container
-	for _, ctr := range containers {
-		out = append(out, parseContainer(ctr))
-	}
-
-	return out, nil
+	return Container{}, errors.New("no container found by that query")
 }
 
 func (c *Client) StartContainer(id string) {

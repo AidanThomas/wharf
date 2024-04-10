@@ -17,6 +17,7 @@ type Application struct {
 var (
 	mainFlex     *tview.Flex
 	resultsTable *Table
+	query        docker.Query
 )
 
 func NewTui() (*Application, error) {
@@ -74,7 +75,7 @@ func (a *Application) createUI() error {
 		case tcell.KeyEnter:
 			row, _ := resultsTable.GetSelection()
 			id := resultsTable.GetCell(row, 4).Text
-			ctr, err := a.cli.GetById(id)
+			ctr, err := a.cli.GetSingle(docker.QueryById(id))
 			if err != nil {
 				panic(err)
 			}
@@ -86,7 +87,7 @@ func (a *Application) createUI() error {
 			}
 			go func() {
 				time.Sleep(500 * time.Millisecond)
-				containers, err := a.cli.GetAll()
+				containers, err := a.cli.GetAll(query)
 				if err != nil {
 					panic(err)
 				}
@@ -96,15 +97,13 @@ func (a *Application) createUI() error {
 		}
 		return event
 	})
-	containers, err := a.cli.GetAll()
+
+	err := a.drawDefault()
 	if err != nil {
 		return err
 	}
 
-	resultsTable.DrawTable(containers)
-
-	mainFlex.AddItem(resultsTable, 0, 1, true)
-	a.SetRoot(mainFlex, true).EnableMouse(true).SetFocus(mainFlex)
+	a.SetRoot(mainFlex, true).EnableMouse(true)
 
 	return nil
 }
@@ -113,7 +112,8 @@ func (a *Application) drawDefault() error {
 	mainFlex.Clear()
 
 	resultsTable.Clear()
-	containers, err := a.cli.GetAll()
+	query = docker.QueryAll()
+	containers, err := a.cli.GetAll(query)
 	if err != nil {
 		return err
 	}
@@ -139,11 +139,13 @@ func (a *Application) drawSearch() {
 		switch event.Key() {
 		case tcell.KeyEnter:
 			searchTerm := searchBox.GetText()
-			containers, err := a.cli.SearchByName(searchTerm)
+			query = docker.QueryByName(searchTerm)
+			containers, err := a.cli.GetAll(query)
 			if err != nil {
 				panic(err)
 			}
 			resultsTable.DrawTable(containers)
+			a.SetFocus(resultsTable)
 			return nil
 		}
 		return event
