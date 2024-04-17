@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"bytes"
 	"time"
 
 	"github.com/AidanThomas/wharf/internal/providers/docker"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -94,6 +96,10 @@ func (a *Application) createUI() error {
 				resultsTable.DrawTable(containers)
 				a.Draw()
 			}()
+		case tcell.KeyCtrlL:
+			row, _ := resultsTable.GetSelection()
+			id := resultsTable.GetCell(row, 4).Text
+			a.drawLogs(id)
 		}
 		return event
 	})
@@ -158,6 +164,26 @@ func (a *Application) drawSearch() {
 		AddItem(resultsTable, 0, 1, false)
 
 	a.SetFocus(searchBox)
+}
+
+func (a *Application) drawLogs(ctrId string) {
+	mainFlex.Clear()
+
+	log := tview.NewTextView()
+	log.SetBorder(true)
+	log.SetBackgroundColor(a.theme.Bg)
+
+	reader, err := a.cli.GetContainerLogs(ctrId)
+	if err != nil {
+		panic(err)
+	}
+	defer reader.Close()
+	dst := &bytes.Buffer{}
+	_, _ = stdcopy.StdCopy(dst, dst, reader)
+	log.SetText(string(dst.String()))
+
+	mainFlex.AddItem(log, 0, 1, true)
+	a.SetFocus(log)
 }
 
 func getColour(ctr docker.Container) tcell.Color {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -73,6 +74,15 @@ func (c *Client) StartContainer(id string) {
 
 func (c *Client) StopContainer(id string) {
 	c.client.ContainerStop(context.Background(), id, container.StopOptions{})
+}
+
+func (c *Client) GetContainerLogs(id string) (io.ReadCloser, error) {
+	return c.client.ContainerLogs(context.Background(), id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Timestamps: true,
+		Details:    true,
+	})
 }
 
 func (c *Client) Close() {
